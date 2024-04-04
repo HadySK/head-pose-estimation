@@ -6,6 +6,7 @@
 #include <dlib/image_processing/frontal_face_detector.h>
 #include <dlib/image_processing/render_face_detections.h>
 #include <dlib/image_processing.h>
+#include <lccv.hpp>
 
 //Intrisics can be calculated using opencv sample code under opencv/sources/samples/cpp/tutorial_code/calib3d
 //Normally, you can also apprximate fx and fy by image width, cx by half image width, cy by half image height instead
@@ -14,13 +15,14 @@ double D[5] = { 7.0834633684407095e-002, 6.9140193737175351e-002, 0.0, 0.0, -1.3
 
 int main()
 {
-    //open cam
-    cv::VideoCapture cap(0);
-    if (!cap.isOpened())
-        {
-        std::cout << "Unable to connect to camera" << std::endl;
-        return EXIT_FAILURE;
-        }
+    /*Camera start*/
+
+    cv::Mat temp;
+    lccv::PiCamera cam;
+    cam.options->video_width=320;
+    cam.options->video_height=240;
+    cam.options->framerate=10;
+    cam.options->verbose=true;
     //Load face detection and pose estimation models (dlib).
     dlib::frontal_face_detector detector = dlib::get_frontal_face_detector();
     dlib::shape_predictor predictor;
@@ -79,18 +81,20 @@ int main()
 
     //text on screen
     std::ostringstream outtext;
-
+    cam.startVideo();
+    std::cout << "Hit ESC to exit" << "\n" ;
+    int ch=0;
     //main loop
-    while (1)
-    {
-        // Grab a frame
-        cv::Mat temp;
-        cap >> temp;
-        dlib::cv_image<dlib::bgr_pixel> cimg(temp);
+    while(ch!=27){
+        if(!cam.getVideoFrame(temp,1000)){
+            std::cout<<"Timeout error"<<std::endl;
+        }
+        else{
+                auto start = std::chrono::system_clock::now();
 
+        dlib::cv_image<dlib::bgr_pixel> cimg(temp);
         // Detect faces
         std::vector<dlib::rectangle> faces = detector(cimg);
-
         // Find the pose of each face
         if (faces.size() > 0)
             {
@@ -142,8 +146,7 @@ int main()
             //calc euler angle
             cv::Rodrigues(rotation_vec, rotation_mat);
             cv::hconcat(rotation_mat, translation_vec, pose_mat);
-            cv::decomposeProjectionMatrix(pose_mat, out_intrinsics, out_rotation, out_translation, cv::noArray(), cv::noArray(), cv::noArray(), euler_angle);
-
+            cv::decomposeProjectionMatrix(pose_mat, out_intrinsics, out_rotation, out_translation, cv::noArray(), cv::noArray(), cv::noArray(), euler_angle);			
             //show angle result
             outtext << "X: " << std::setprecision(3) << euler_angle.at<double>(0);
             cv::putText(temp, outtext.str(), cv::Point(50, 40), cv::FONT_HERSHEY_SIMPLEX, 0.75, cv::Scalar(0, 0, 0));
@@ -157,6 +160,11 @@ int main()
 
             image_pts.clear();
             }
+         auto end = std::chrono::system_clock::now();
+        //end - start is the time taken to process 1 frame, output it:
+        std::chrono::duration<double> diff = end-start;
+        std::cout << "Time to process last frame (seconds): " << diff.count()
+                  << " FPS: " << 1.0 / diff.count() << "\n";
 
         //press esc to end
         cv::imshow("demo", temp);
@@ -165,7 +173,11 @@ int main()
             {
             break;
             }
+
+        }
     }
+    cam.stopVideo();
+    cv::destroyWindow("Video");
 
     return 0;
 }
